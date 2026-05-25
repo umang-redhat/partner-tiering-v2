@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Account_Hardware_Product_Cert__c</fullName>
+    <defaultValue>0</defaultValue>
+    <description>Count of Hardware Product Certifications held by the partner account. Used as Build module Path B equivalency credential. Synced from external Red Hat credential system.</description>
+    <externalId>false</externalId>
+    <label>Account Hardware Product Certifications</label>
+    <precision>5</precision>
+    <required>false</required>
+    <scale>0</scale>
+    <trackHistory>false</trackHistory>
+    <trackTrending>false</trackTrending>
+    <type>Number</type>
+    <unique>false</unique>
+</CustomField>

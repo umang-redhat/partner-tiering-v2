@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>Module_Tier_Requirement__c.Is_Active__c</members>
+        <members>Module_Tier_Requirement__c.Equivalency_Allowed__c</members>
+        <members>Module_Tier_Requirement__c.Required_Cumulative_Points__c</members>
+        <members>Module_Tier_Requirement__c.Req_RHSC_Credentials__c</members>
+        <members>Module_Tier_Requirement__c.Req_RHTSC_Credentials__c</members>
+        <members>Module_Tier_Requirement__c.Req_RH_Certifications__c</members>
+        <name>CustomField</name>
+    </types>
+    <version>62.0</version>
+</Package>

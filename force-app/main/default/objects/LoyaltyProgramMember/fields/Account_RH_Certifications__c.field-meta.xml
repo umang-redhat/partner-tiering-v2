@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Account_RH_Certifications__c</fullName>
+    <description>Count of Red Hat Technical Certifications held by the partner account. Used as the Equivalency Path credential for the Build module.</description>
+    <label>Account RH Certifications</label>
+    <precision>18</precision>
+    <required>false</required>
+    <scale>0</scale>
+    <type>Number</type>
+    <unique>false</unique>
+</CustomField>

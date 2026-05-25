@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Module__c</fullName>
+    <description>Partner module the rule applies to.</description>
+    <externalId>false</externalId>
+    <label>Module</label>
+    <required>true</required>
+    <trackFeedHistory>false</trackFeedHistory>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Build</fullName>
+                <default>true</default>
+                <label>Build</label>
+            </value>
+            <value>
+                <fullName>Reseller</fullName>
+                <default>false</default>
+                <label>Reseller</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

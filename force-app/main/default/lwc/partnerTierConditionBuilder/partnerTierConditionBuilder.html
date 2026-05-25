@@ -1,0 +1,103 @@
+<template>
+    <lightning-card title="Condition Builder (Filter Logic)" icon-name="utility:formula">
+        <div class="slds-p-horizontal_medium slds-p-bottom_medium">
+            <template if:true={isLoading}>
+                <lightning-spinner alternative-text="Loading" size="small"></lightning-spinner>
+            </template>
+
+            <template if:true={versionInfo}>
+                <div class="slds-box slds-theme_default slds-m-bottom_medium">
+                    <p class="slds-text-title_caps slds-m-bottom_x-small">Rule Version Context</p>
+                    <p><strong>Module:</strong> {versionInfo.moduleName}</p>
+                    <p><strong>Tier:</strong> {versionInfo.tierName}</p>
+                    <p><strong>Status:</strong> {versionInfo.status}</p>
+                    <p><strong>Min Points:</strong> {versionInfo.minPoints}</p>
+                    <p><strong>In Effect Date:</strong> {versionInfo.inEffectDate}</p>
+                </div>
+            </template>
+
+            <div class="slds-m-bottom_medium">
+                <lightning-button variant="brand-outline" label="+ Add Condition Row" onclick={handleAddCondition}></lightning-button>
+            </div>
+
+            <template if:false={hasConditions}>
+                <div class="slds-text-color_weak slds-m-bottom_medium">
+                    No conditions yet. Add one or more rows, then define filter logic.
+                </div>
+            </template>
+
+            <template for:each={conditions} for:item="cond">
+                <div key={cond.clientKey} class="slds-grid slds-wrap slds-gutters slds-m-bottom_x-small slds-p-around_x-small slds-border_bottom">
+                    <div class="slds-col slds-size_12-of-12 slds-large-size_1-of-12 slds-p-top_large">
+                        <span class="slds-badge">{cond.displayIndex}</span>
+                    </div>
+
+                    <div class="slds-col slds-size_12-of-12 slds-large-size_4-of-12">
+                        <lightning-combobox
+                            label="Field"
+                            options={fieldOptions}
+                            value={cond.fieldApiName}
+                            data-condition-key={cond.clientKey}
+                            onchange={handleConditionFieldChange}>
+                        </lightning-combobox>
+                    </div>
+
+                    <div class="slds-col slds-size_12-of-12 slds-large-size_2-of-12">
+                        <lightning-combobox
+                            label="Operator"
+                            options={operatorOptions}
+                            value={cond.operatorValue}
+                            data-condition-key={cond.clientKey}
+                            onchange={handleConditionOperatorChange}>
+                        </lightning-combobox>
+                    </div>
+
+                    <div class="slds-col slds-size_12-of-12 slds-large-size_3-of-12">
+                        <lightning-input
+                            type="number"
+                            label="Value"
+                            value={cond.threshold}
+                            data-condition-key={cond.clientKey}
+                            onchange={handleConditionThresholdChange}>
+                        </lightning-input>
+                    </div>
+
+                    <div class="slds-col slds-size_12-of-12 slds-large-size_2-of-12 slds-p-top_large">
+                        <lightning-button-icon
+                            icon-name="utility:delete"
+                            alternative-text="Remove Condition"
+                            title="Remove Condition"
+                            data-condition-key={cond.clientKey}
+                            onclick={handleRemoveCondition}>
+                        </lightning-button-icon>
+                    </div>
+                </div>
+            </template>
+
+            <div class="slds-m-bottom_medium">
+                <lightning-button variant="neutral" label="+ Add Condition Row" onclick={handleAddCondition}></lightning-button>
+            </div>
+
+            <div class="slds-m-top_medium slds-m-bottom_medium">
+                <lightning-textarea
+                    label="Filter Logic"
+                    value={filterLogic}
+                    onchange={handleFilterLogicChange}
+                    placeholder="Example: ((1 OR 2) AND (3 OR 4)) OR (5 AND 6)">
+                </lightning-textarea>
+            </div>
+
+            <template if:true={errorMessage}>
+                <div class="slds-notify slds-notify_alert slds-theme_error slds-m-bottom_medium" role="alert">
+                    <span class="slds-assistive-text">Error</span>
+                    <h2>{errorMessage}</h2>
+                </div>
+            </template>
+
+            <div class="slds-m-top_medium">
+                <lightning-button class="slds-m-right_small" variant="neutral" label="Validate Logic" onclick={handleValidateLogic}></lightning-button>
+                <lightning-button variant="brand" label="Save Condition Model" onclick={handleSave}></lightning-button>
+            </div>
+        </div>
+    </lightning-card>
+</template>
