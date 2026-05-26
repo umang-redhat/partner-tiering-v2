@@ -134,141 +134,149 @@ public with sharing class PartnerTierRuleBuilderController {
 
     @AuraEnabled
     public static void saveRuleVersionGraph(Id ruleVersionId, String groupsJson) {
-        if (ruleVersionId == null) {
-            throw new AuraHandledException('ruleVersionId is required.');
-        }
-        if (String.isBlank(groupsJson)) {
-            throw new AuraHandledException('groupsJson is required.');
-        }
-
-        // Lock parent so concurrent editors do not clobber each other.
-        Id lockedVersionId = [
-            SELECT Id
-            FROM PartnerTierRuleVersion__c
-            WHERE Id = :ruleVersionId
-            LIMIT 1
-            FOR UPDATE
-        ].Id;
-
-        List<Object> groupPayload = (List<Object>) JSON.deserializeUntyped(groupsJson);
-
-        Map<Id, PartnerTierRuleGroup__c> existingGroups = new Map<Id, PartnerTierRuleGroup__c>([
-            SELECT Id, Rule_Version__c
-            FROM PartnerTierRuleGroup__c
-            WHERE Rule_Version__c = :ruleVersionId
-        ]);
-
-        List<PartnerTierRuleGroup__c> groupsToUpsert = new List<PartnerTierRuleGroup__c>();
-        List<RuleGroupDTO> incomingGroups = new List<RuleGroupDTO>();
-        Integer nextOrder = 1;
-
-        for (Object gObj : groupPayload) {
-            Map<String, Object> raw = (Map<String, Object>) gObj;
-            RuleGroupDTO incoming = new RuleGroupDTO();
-            incoming.id = parseId(raw.get('id'));
-            incoming.groupOrder = raw.get('groupOrder') == null ? nextOrder : Integer.valueOf(String.valueOf(raw.get('groupOrder')));
-            incoming.conditions = new List<RuleConditionDTO>();
-            incomingGroups.add(incoming);
-
-            PartnerTierRuleGroup__c up = new PartnerTierRuleGroup__c();
-            if (incoming.id != null) {
-                up.Id = incoming.id;
+        try {
+            if (ruleVersionId == null) {
+                throw new AuraHandledException('ruleVersionId is required.');
             }
-            up.Rule_Version__c = ruleVersionId;
-            up.Group_Order__c = incoming.groupOrder;
-            groupsToUpsert.add(up);
-
-            List<Object> condPayload = (List<Object>) raw.get('conditions');
-            if (condPayload != null) {
-                Integer nextCondOrder = 1;
-                for (Object cObj : condPayload) {
-                    Map<String, Object> cRaw = (Map<String, Object>) cObj;
-                    RuleConditionDTO cdto = new RuleConditionDTO();
-                    cdto.id = parseId(cRaw.get('id'));
-                    cdto.conditionOrder = cRaw.get('conditionOrder') == null ? nextCondOrder : Integer.valueOf(String.valueOf(cRaw.get('conditionOrder')));
-                    cdto.fieldApiName = (String) cRaw.get('fieldApiName');
-                    cdto.operatorValue = (String) cRaw.get('operatorValue');
-                    cdto.threshold = cRaw.get('threshold') == null ? null : Decimal.valueOf(String.valueOf(cRaw.get('threshold')));
-                    incoming.conditions.add(cdto);
-                    nextCondOrder++;
-                }
+            if (String.isBlank(groupsJson)) {
+                throw new AuraHandledException('groupsJson is required.');
             }
-            nextOrder++;
-        }
 
-        if (groupsToUpsert.isEmpty()) {
-            throw new AuraHandledException('At least one OR group is required.');
-        }
-
-        upsert groupsToUpsert;
-
-        Set<Id> keptGroupIds = new Set<Id>();
-        for (PartnerTierRuleGroup__c g : groupsToUpsert) {
-            keptGroupIds.add(g.Id);
-        }
-
-        // Build index of group id -> incoming conditions
-        Map<Id, List<RuleConditionDTO>> incomingConditionsByGroup = new Map<Id, List<RuleConditionDTO>>();
-        for (Integer i = 0; i < groupsToUpsert.size(); i++) {
-            incomingConditionsByGroup.put(groupsToUpsert[i].Id, incomingGroups[i].conditions);
-        }
-
-        // Remove groups no longer present.
-        List<PartnerTierRuleGroup__c> groupsToDelete = new List<PartnerTierRuleGroup__c>();
-        for (PartnerTierRuleGroup__c ex : existingGroups.values()) {
-            if (!keptGroupIds.contains(ex.Id)) {
-                groupsToDelete.add(ex);
-            }
-        }
-        if (!groupsToDelete.isEmpty()) {
-            delete groupsToDelete;
-        }
-
-        // Upsert/delete conditions per group.
-        for (Id groupId : incomingConditionsByGroup.keySet()) {
-            List<RuleConditionDTO> incomingConds = incomingConditionsByGroup.get(groupId);
-            Map<Id, PartnerTierRuleCondition__c> existingConds = new Map<Id, PartnerTierRuleCondition__c>([
+            // Lock parent so concurrent editors do not clobber each other.
+            Id lockedVersionId = [
                 SELECT Id
-                FROM PartnerTierRuleCondition__c
-                WHERE Rule_Group__c = :groupId
+                FROM PartnerTierRuleVersion__c
+                WHERE Id = :ruleVersionId
+                LIMIT 1
+                FOR UPDATE
+            ].Id;
+
+            List<Object> groupPayload = (List<Object>) JSON.deserializeUntyped(groupsJson);
+
+            Map<Id, PartnerTierRuleGroup__c> existingGroups = new Map<Id, PartnerTierRuleGroup__c>([
+                SELECT Id, Rule_Version__c
+                FROM PartnerTierRuleGroup__c
+                WHERE Rule_Version__c = :ruleVersionId
             ]);
 
-            List<PartnerTierRuleCondition__c> condsToUpsert = new List<PartnerTierRuleCondition__c>();
-            Set<Id> keptCondIds = new Set<Id>();
+            List<PartnerTierRuleGroup__c> groupsToUpsert = new List<PartnerTierRuleGroup__c>();
+            List<RuleGroupDTO> incomingGroups = new List<RuleGroupDTO>();
+            Integer nextOrder = 1;
 
-            for (RuleConditionDTO c : incomingConds) {
-                if (String.isBlank(c.fieldApiName) || String.isBlank(c.operatorValue) || c.threshold == null) {
-                    continue;
+            for (Object gObj : groupPayload) {
+                Map<String, Object> raw = (Map<String, Object>) gObj;
+                RuleGroupDTO incoming = new RuleGroupDTO();
+                incoming.id = parseId(raw.get('id'));
+                incoming.groupOrder = raw.get('groupOrder') == null ? nextOrder : Integer.valueOf(String.valueOf(raw.get('groupOrder')));
+                incoming.conditions = new List<RuleConditionDTO>();
+                incomingGroups.add(incoming);
+
+                PartnerTierRuleGroup__c up = new PartnerTierRuleGroup__c();
+                if (incoming.id != null) {
+                    up.Id = incoming.id;
                 }
-                PartnerTierRuleCondition__c rec = new PartnerTierRuleCondition__c();
-                if (c.id != null) {
-                    rec.Id = c.id;
-                    keptCondIds.add(c.id);
+                up.Rule_Version__c = ruleVersionId;
+                up.Group_Order__c = incoming.groupOrder;
+                groupsToUpsert.add(up);
+
+                List<Object> condPayload = (List<Object>) raw.get('conditions');
+                if (condPayload != null) {
+                    Integer nextCondOrder = 1;
+                    for (Object cObj : condPayload) {
+                        Map<String, Object> cRaw = (Map<String, Object>) cObj;
+                        RuleConditionDTO cdto = new RuleConditionDTO();
+                        cdto.id = parseId(cRaw.get('id'));
+                        cdto.conditionOrder = cRaw.get('conditionOrder') == null ? nextCondOrder : Integer.valueOf(String.valueOf(cRaw.get('conditionOrder')));
+                        cdto.fieldApiName = (String) cRaw.get('fieldApiName');
+                        cdto.operatorValue = (String) cRaw.get('operatorValue');
+                        cdto.threshold = cRaw.get('threshold') == null ? null : Decimal.valueOf(String.valueOf(cRaw.get('threshold')));
+                        incoming.conditions.add(cdto);
+                        nextCondOrder++;
+                    }
                 }
-                rec.Rule_Group__c = groupId;
-                rec.Condition_Order__c = c.conditionOrder;
-                rec.Field_API_Name__c = c.fieldApiName;
-                rec.Operator__c = c.operatorValue;
-                rec.Threshold__c = c.threshold;
-                condsToUpsert.add(rec);
+                nextOrder++;
             }
 
-            if (!condsToUpsert.isEmpty()) {
-                upsert condsToUpsert;
-                for (PartnerTierRuleCondition__c cUp : condsToUpsert) {
-                    keptCondIds.add(cUp.Id);
-                }
+            if (groupsToUpsert.isEmpty()) {
+                throw new AuraHandledException('At least one OR group is required.');
             }
 
-            List<PartnerTierRuleCondition__c> condsToDelete = new List<PartnerTierRuleCondition__c>();
-            for (PartnerTierRuleCondition__c ex : existingConds.values()) {
-                if (!keptCondIds.contains(ex.Id)) {
-                    condsToDelete.add(ex);
+            upsert groupsToUpsert;
+
+            Set<Id> keptGroupIds = new Set<Id>();
+            for (PartnerTierRuleGroup__c g : groupsToUpsert) {
+                keptGroupIds.add(g.Id);
+            }
+
+            // Build index of group id -> incoming conditions
+            Map<Id, List<RuleConditionDTO>> incomingConditionsByGroup = new Map<Id, List<RuleConditionDTO>>();
+            for (Integer i = 0; i < groupsToUpsert.size(); i++) {
+                incomingConditionsByGroup.put(groupsToUpsert[i].Id, incomingGroups[i].conditions);
+            }
+
+            // Remove groups no longer present.
+            List<PartnerTierRuleGroup__c> groupsToDelete = new List<PartnerTierRuleGroup__c>();
+            for (PartnerTierRuleGroup__c ex : existingGroups.values()) {
+                if (!keptGroupIds.contains(ex.Id)) {
+                    groupsToDelete.add(ex);
                 }
             }
-            if (!condsToDelete.isEmpty()) {
-                delete condsToDelete;
+            if (!groupsToDelete.isEmpty()) {
+                delete groupsToDelete;
             }
+
+            // Upsert/delete conditions per group.
+            for (Id groupId : incomingConditionsByGroup.keySet()) {
+                List<RuleConditionDTO> incomingConds = incomingConditionsByGroup.get(groupId);
+                Map<Id, PartnerTierRuleCondition__c> existingConds = new Map<Id, PartnerTierRuleCondition__c>([
+                    SELECT Id
+                    FROM PartnerTierRuleCondition__c
+                    WHERE Rule_Group__c = :groupId
+                ]);
+
+                List<PartnerTierRuleCondition__c> condsToUpsert = new List<PartnerTierRuleCondition__c>();
+                Set<Id> keptCondIds = new Set<Id>();
+
+                for (RuleConditionDTO c : incomingConds) {
+                    if (String.isBlank(c.fieldApiName) || String.isBlank(c.operatorValue) || c.threshold == null) {
+                        continue;
+                    }
+                    PartnerTierRuleCondition__c rec = new PartnerTierRuleCondition__c();
+                    if (c.id != null) {
+                        rec.Id = c.id;
+                        keptCondIds.add(c.id);
+                    } else {
+                        // Rule_Group__c is non-reparentable master-detail; set only for inserts.
+                        rec.Rule_Group__c = groupId;
+                    }
+                    rec.Condition_Order__c = c.conditionOrder;
+                    rec.Field_API_Name__c = c.fieldApiName;
+                    rec.Operator__c = c.operatorValue;
+                    rec.Threshold__c = c.threshold;
+                    condsToUpsert.add(rec);
+                }
+
+                if (!condsToUpsert.isEmpty()) {
+                    upsert condsToUpsert;
+                    for (PartnerTierRuleCondition__c cUp : condsToUpsert) {
+                        keptCondIds.add(cUp.Id);
+                    }
+                }
+
+                List<PartnerTierRuleCondition__c> condsToDelete = new List<PartnerTierRuleCondition__c>();
+                for (PartnerTierRuleCondition__c ex : existingConds.values()) {
+                    if (!keptCondIds.contains(ex.Id)) {
+                        condsToDelete.add(ex);
+                    }
+                }
+                if (!condsToDelete.isEmpty()) {
+                    delete condsToDelete;
+                }
+            }
+        } catch (Exception e) {
+            throw new AuraHandledException(
+                'Save failed: ' + e.getTypeName() + ' - ' + e.getMessage()
+            );
         }
     }
 

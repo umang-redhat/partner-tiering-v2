@@ -260,7 +260,9 @@ export default class PartnerTierConditionBuilder extends LightningElement {
             const conditions = uniqueRefs.map((rowRef, idx) => {
                 const source = this.conditions[rowRef - 1];
                 return {
-                    id: source.id || null,
+                    // Always insert fresh compiled condition rows.
+                    // Reusing existing ids across compiled DNF terms can trigger duplicate-id DML errors.
+                    id: null,
                     conditionOrder: idx + 1,
                     fieldApiName: source.fieldApiName,
                     operatorValue: source.operatorValue,
