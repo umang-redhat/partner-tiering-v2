@@ -2,6 +2,9 @@
  * @description UI controller for partner tier rule condition builder.
  */
 public with sharing class PartnerTierRuleBuilderController {
+    private static final String FIELD_MIN_ELIGIBLE_BALANCE = 'MinimumEligibleBalance';
+    private static final String FIELD_MAX_ELIGIBLE_BALANCE = 'MaximumEligibleBalance';
+
 
     public class RuleConditionDTO {
         @AuraEnabled public Id id;
@@ -21,7 +24,6 @@ public with sharing class PartnerTierRuleBuilderController {
         @AuraEnabled public Id id;
         @AuraEnabled public String moduleName;
         @AuraEnabled public String tierName;
-        @AuraEnabled public Decimal minPoints;
         @AuraEnabled public Date inEffectDate;
         @AuraEnabled public String status;
         @AuraEnabled public List<RuleGroupDTO> groups;
@@ -46,7 +48,6 @@ public with sharing class PartnerTierRuleBuilderController {
             SELECT Id,
                    Module__c,
                    Tier__c,
-                   Min_Points__c,
                    In_Effect_Date__c,
                    Status__c
             FROM PartnerTierRuleVersion__c
@@ -64,7 +65,12 @@ public with sharing class PartnerTierRuleBuilderController {
         Map<Id, List<PartnerTierRuleCondition__c>> conditionsByGroup = new Map<Id, List<PartnerTierRuleCondition__c>>();
         if (!groups.isEmpty()) {
             for (PartnerTierRuleCondition__c c : [
-                SELECT Id, Rule_Group__c, Condition_Order__c, Field_API_Name__c, Operator__c, Threshold__c
+                SELECT Id,
+                       Rule_Group__c,
+                       Condition_Order__c,
+                       Field_API_Name__c,
+                       Operator__c,
+                       Threshold__c
                 FROM PartnerTierRuleCondition__c
                 WHERE Rule_Group__c IN :groups
                 ORDER BY Condition_Order__c ASC, CreatedDate ASC
@@ -80,7 +86,6 @@ public with sharing class PartnerTierRuleBuilderController {
         dto.id = versionRec.Id;
         dto.moduleName = versionRec.Module__c;
         dto.tierName = versionRec.Tier__c;
-        dto.minPoints = versionRec.Min_Points__c;
         dto.inEffectDate = versionRec.In_Effect_Date__c;
         dto.status = versionRec.Status__c;
         dto.groups = new List<RuleGroupDTO>();
@@ -112,6 +117,8 @@ public with sharing class PartnerTierRuleBuilderController {
     @AuraEnabled(cacheable=true)
     public static List<SelectOptionDTO> getConditionFieldOptions() {
         return new List<SelectOptionDTO>{
+            new SelectOptionDTO('MinimumEligibleBalance', FIELD_MIN_ELIGIBLE_BALANCE),
+            new SelectOptionDTO('MaximumEligibleBalance', FIELD_MAX_ELIGIBLE_BALANCE),
             new SelectOptionDTO('Software Product Certifications', 'Account_Software_Product_Cert__c'),
             new SelectOptionDTO('Hardware Product Certifications', 'Account_Hardware_Product_Cert__c'),
             new SelectOptionDTO('RH Seller Credentials', 'Account_RHSC_Credentials__c'),
@@ -287,4 +294,5 @@ public with sharing class PartnerTierRuleBuilderController {
         String value = String.valueOf(raw);
         return String.isBlank(value) ? null : (Id) value;
     }
+
 }

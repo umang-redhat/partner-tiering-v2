@@ -12,6 +12,11 @@
         <valueSetDefinition>
             <sorted>false</sorted>
             <value>
+                <fullName>Unaffiliated</fullName>
+                <default>false</default>
+                <label>Unaffiliated</label>
+            </value>
+            <value>
                 <fullName>Ready</fullName>
                 <default>true</default>
                 <label>Ready</label>

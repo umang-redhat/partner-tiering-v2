@@ -1,6 +1,9 @@
 /**
  * Demo data setup for custom-object rule model:
  * PartnerTierRuleVersion__c -> PartnerTierRuleGroup__c -> PartnerTierRuleCondition__c.
+ *
+ * This version seeds points as condition rows (MinimumEligibleBalance/MaximumEligibleBalance) instead of
+ * relying on Min_Points__c gates at the rule-version level.
  */
 
 // 1) Resolve an active LoyaltyProgram and one currency.
@@ -45,7 +48,6 @@ List<PartnerTierRuleVersion__c> seededVersions = new List<PartnerTierRuleVersion
         Module__c = 'Build',
         Tier__c = 'Ready',
         Tier_Rank__c = 1,
-        Min_Points__c = 5000,
         In_Effect_Date__c = todayDate,
         Status__c = 'Active'
     ),
@@ -53,7 +55,6 @@ List<PartnerTierRuleVersion__c> seededVersions = new List<PartnerTierRuleVersion
         Module__c = 'Build',
         Tier__c = 'Advanced',
         Tier_Rank__c = 2,
-        Min_Points__c = 25000,
         In_Effect_Date__c = todayDate,
         Status__c = 'Active'
     ),
@@ -61,31 +62,34 @@ List<PartnerTierRuleVersion__c> seededVersions = new List<PartnerTierRuleVersion
         Module__c = 'Build',
         Tier__c = 'Premier',
         Tier_Rank__c = 3,
-        Min_Points__c = 50000,
+        In_Effect_Date__c = todayDate,
+        Status__c = 'Active'
+    ),
+    new PartnerTierRuleVersion__c(
+        Module__c = 'Reseller',
+        Tier__c = 'Unaffiliated',
+        Tier_Rank__c = 1,
         In_Effect_Date__c = todayDate,
         Status__c = 'Active'
     ),
     new PartnerTierRuleVersion__c(
         Module__c = 'Reseller',
         Tier__c = 'Ready',
-        Tier_Rank__c = 1,
-        Min_Points__c = 2000,
+        Tier_Rank__c = 2,
         In_Effect_Date__c = todayDate,
         Status__c = 'Active'
     ),
     new PartnerTierRuleVersion__c(
         Module__c = 'Reseller',
         Tier__c = 'Advanced',
-        Tier_Rank__c = 2,
-        Min_Points__c = 8000,
+        Tier_Rank__c = 3,
         In_Effect_Date__c = todayDate,
         Status__c = 'Active'
     ),
     new PartnerTierRuleVersion__c(
         Module__c = 'Reseller',
         Tier__c = 'Premier',
-        Tier_Rank__c = 3,
-        Min_Points__c = 20000,
+        Tier_Rank__c = 4,
         In_Effect_Date__c = todayDate,
         Status__c = 'Active'
     )
@@ -106,8 +110,13 @@ List<PartnerTierRuleGroup__c> groups = new List<PartnerTierRuleGroup__c>{
     new PartnerTierRuleGroup__c(Rule_Version__c = versionByKey.get('Build|Advanced'), Group_Order__c = 1),
     new PartnerTierRuleGroup__c(Rule_Version__c = versionByKey.get('Build|Advanced'), Group_Order__c = 2),
     new PartnerTierRuleGroup__c(Rule_Version__c = versionByKey.get('Build|Advanced'), Group_Order__c = 3),
-    // Build Premier single AND group
-    new PartnerTierRuleGroup__c(Rule_Version__c = versionByKey.get('Build|Premier'), Group_Order__c = 1)
+    // Build Premier
+    new PartnerTierRuleGroup__c(Rule_Version__c = versionByKey.get('Build|Premier'), Group_Order__c = 1),
+    // Reseller tiers (single group each)
+    new PartnerTierRuleGroup__c(Rule_Version__c = versionByKey.get('Reseller|Unaffiliated'), Group_Order__c = 1),
+    new PartnerTierRuleGroup__c(Rule_Version__c = versionByKey.get('Reseller|Ready'), Group_Order__c = 1),
+    new PartnerTierRuleGroup__c(Rule_Version__c = versionByKey.get('Reseller|Advanced'), Group_Order__c = 1),
+    new PartnerTierRuleGroup__c(Rule_Version__c = versionByKey.get('Reseller|Premier'), Group_Order__c = 1)
 };
 insert groups;
 
@@ -121,29 +130,58 @@ for (PartnerTierRuleGroup__c g : groups) {
 }
 
 insert new List<PartnerTierRuleCondition__c>{
-    // Build Ready
+    // Build Ready: SwCert >=1 OR HwCert >=1 OR RHSC>=2
     new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Ready|1'), Condition_Order__c = 1, Field_API_Name__c = 'Account_Software_Product_Cert__c', Operator__c = '>=', Threshold__c = 1),
     new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Ready|2'), Condition_Order__c = 1, Field_API_Name__c = 'Account_Hardware_Product_Cert__c', Operator__c = '>=', Threshold__c = 1),
     new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Ready|3'), Condition_Order__c = 1, Field_API_Name__c = 'Account_RHSC_Credentials__c', Operator__c = '>=', Threshold__c = 2),
-    // Build Advanced
+
+    // Build Advanced: (SwCert >=1 OR HwCert >=1 OR (RHSC>=3 AND RHTSC>=2 AND RHC>=1)) AND points >= 25,000
     new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Advanced|1'), Condition_Order__c = 1, Field_API_Name__c = 'Account_Software_Product_Cert__c', Operator__c = '>=', Threshold__c = 1),
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Advanced|1'), Condition_Order__c = 2, Field_API_Name__c = 'MinimumEligibleBalance', Operator__c = '>=', Threshold__c = 25000),
     new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Advanced|2'), Condition_Order__c = 1, Field_API_Name__c = 'Account_Hardware_Product_Cert__c', Operator__c = '>=', Threshold__c = 1),
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Advanced|2'), Condition_Order__c = 2, Field_API_Name__c = 'MinimumEligibleBalance', Operator__c = '>=', Threshold__c = 25000),
     new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Advanced|3'), Condition_Order__c = 1, Field_API_Name__c = 'Account_RHSC_Credentials__c', Operator__c = '>=', Threshold__c = 3),
     new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Advanced|3'), Condition_Order__c = 2, Field_API_Name__c = 'Account_RHTSC_Credentials__c', Operator__c = '>=', Threshold__c = 2),
     new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Advanced|3'), Condition_Order__c = 3, Field_API_Name__c = 'Account_RH_Certifications__c', Operator__c = '>=', Threshold__c = 1),
-    // Build Premier
-    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Premier|1'), Condition_Order__c = 1, Field_API_Name__c = 'Account_RHSC_Credentials__c', Operator__c = '>=', Threshold__c = 5),
-    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Premier|1'), Condition_Order__c = 2, Field_API_Name__c = 'Account_RHTSC_Credentials__c', Operator__c = '>=', Threshold__c = 4)
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Advanced|3'), Condition_Order__c = 4, Field_API_Name__c = 'MinimumEligibleBalance', Operator__c = '>=', Threshold__c = 25000),
+
+    // Build Premier: (RHSC>=6 AND RHTSC>=4 AND RHC>=2) AND points >= 100,000
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Premier|1'), Condition_Order__c = 1, Field_API_Name__c = 'Account_RHSC_Credentials__c', Operator__c = '>=', Threshold__c = 6),
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Premier|1'), Condition_Order__c = 2, Field_API_Name__c = 'Account_RHTSC_Credentials__c', Operator__c = '>=', Threshold__c = 4),
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Premier|1'), Condition_Order__c = 3, Field_API_Name__c = 'Account_RH_Certifications__c', Operator__c = '>=', Threshold__c = 2),
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Build|Premier|1'), Condition_Order__c = 4, Field_API_Name__c = 'MinimumEligibleBalance', Operator__c = '>=', Threshold__c = 100000),
+
+    // Reseller Unaffiliated: 0 points AND <2 RH Seller credentials
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Reseller|Unaffiliated|1'), Condition_Order__c = 1, Field_API_Name__c = 'MinimumEligibleBalance', Operator__c = '=', Threshold__c = 0),
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Reseller|Unaffiliated|1'), Condition_Order__c = 2, Field_API_Name__c = 'Account_RHSC_Credentials__c', Operator__c = '<', Threshold__c = 2),
+
+    // Reseller Ready: 1-24,999 points AND 2 RH Seller credentials
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Reseller|Ready|1'), Condition_Order__c = 1, Field_API_Name__c = 'MinimumEligibleBalance', Operator__c = '>=', Threshold__c = 1),
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Reseller|Ready|1'), Condition_Order__c = 2, Field_API_Name__c = 'MaximumEligibleBalance', Operator__c = '<=', Threshold__c = 24999),
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Reseller|Ready|1'), Condition_Order__c = 3, Field_API_Name__c = 'Account_RHSC_Credentials__c', Operator__c = '>=', Threshold__c = 2),
+
+    // Reseller Advanced: 25,000-99,999 points + credentials
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Reseller|Advanced|1'), Condition_Order__c = 1, Field_API_Name__c = 'MinimumEligibleBalance', Operator__c = '>=', Threshold__c = 25000),
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Reseller|Advanced|1'), Condition_Order__c = 2, Field_API_Name__c = 'MaximumEligibleBalance', Operator__c = '<=', Threshold__c = 99999),
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Reseller|Advanced|1'), Condition_Order__c = 3, Field_API_Name__c = 'Account_RHSC_Credentials__c', Operator__c = '>=', Threshold__c = 3),
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Reseller|Advanced|1'), Condition_Order__c = 4, Field_API_Name__c = 'Account_RHTSC_Credentials__c', Operator__c = '>=', Threshold__c = 2),
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Reseller|Advanced|1'), Condition_Order__c = 5, Field_API_Name__c = 'Account_RH_Certifications__c', Operator__c = '>=', Threshold__c = 1),
+
+    // Reseller Premier: 100,000+ points + credentials
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Reseller|Premier|1'), Condition_Order__c = 1, Field_API_Name__c = 'MinimumEligibleBalance', Operator__c = '>=', Threshold__c = 100000),
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Reseller|Premier|1'), Condition_Order__c = 2, Field_API_Name__c = 'Account_RHSC_Credentials__c', Operator__c = '>=', Threshold__c = 6),
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Reseller|Premier|1'), Condition_Order__c = 3, Field_API_Name__c = 'Account_RHTSC_Credentials__c', Operator__c = '>=', Threshold__c = 4),
+    new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Reseller|Premier|1'), Condition_Order__c = 4, Field_API_Name__c = 'Account_RH_Certifications__c', Operator__c = '>=', Threshold__c = 2)
 };
 
 // 3) Create demo members.
 Account demoAccount = new Account(Name = 'Partner Tiering Demo Account');
 insert demoAccount;
 
-LoyaltyProgramMember demoA = new LoyaltyProgramMember(
+LoyaltyProgramMember buildA = new LoyaltyProgramMember(
     MemberStatus                     = 'Active',
     MemberType                       = 'Corporate',
-    MembershipNumber                 = 'PT-A-' + String.valueOf(DateTime.now().getTime()),
+    MembershipNumber                 = 'PT-BA-' + String.valueOf(DateTime.now().getTime()),
     EnrollmentDate                   = Date.today(),
     AccountId                        = demoAccount.Id,
     ProgramId                        = programId,
@@ -156,10 +194,10 @@ LoyaltyProgramMember demoA = new LoyaltyProgramMember(
     Account_RH_Certifications__c     = 0
 );
 
-LoyaltyProgramMember demoB = new LoyaltyProgramMember(
+LoyaltyProgramMember buildB = new LoyaltyProgramMember(
     MemberStatus                     = 'Active',
     MemberType                       = 'Corporate',
-    MembershipNumber                 = 'PT-B-' + String.valueOf(DateTime.now().getTime()),
+    MembershipNumber                 = 'PT-BB-' + String.valueOf(DateTime.now().getTime()),
     EnrollmentDate                   = Date.today(),
     AccountId                        = demoAccount.Id,
     ProgramId                        = programId,
@@ -172,10 +210,10 @@ LoyaltyProgramMember demoB = new LoyaltyProgramMember(
     Account_RH_Certifications__c     = 1
 );
 
-LoyaltyProgramMember demoC = new LoyaltyProgramMember(
+LoyaltyProgramMember buildC = new LoyaltyProgramMember(
     MemberStatus                     = 'Active',
     MemberType                       = 'Corporate',
-    MembershipNumber                 = 'PT-C-' + String.valueOf(DateTime.now().getTime()),
+    MembershipNumber                 = 'PT-BC-' + String.valueOf(DateTime.now().getTime()),
     EnrollmentDate                   = Date.today(),
     AccountId                        = demoAccount.Id,
     ProgramId                        = programId,
@@ -187,22 +225,92 @@ LoyaltyProgramMember demoC = new LoyaltyProgramMember(
     Account_RHTSC_Credentials__c     = 0,
     Account_RH_Certifications__c     = 0
 );
-insert new List<LoyaltyProgramMember>{ demoA, demoB, demoC };
+
+LoyaltyProgramMember resellerU = new LoyaltyProgramMember(
+    MemberStatus                     = 'Active',
+    MemberType                       = 'Corporate',
+    MembershipNumber                 = 'PT-RU-' + String.valueOf(DateTime.now().getTime()),
+    EnrollmentDate                   = Date.today(),
+    AccountId                        = demoAccount.Id,
+    ProgramId                        = programId,
+    Build_Certify__c                 = false,
+    Reseller__c                      = true,
+    Account_Software_Product_Cert__c = 0,
+    Account_Hardware_Product_Cert__c = 0,
+    Account_RHSC_Credentials__c      = 1,
+    Account_RHTSC_Credentials__c     = 0,
+    Account_RH_Certifications__c     = 0
+);
+
+LoyaltyProgramMember resellerR = new LoyaltyProgramMember(
+    MemberStatus                     = 'Active',
+    MemberType                       = 'Corporate',
+    MembershipNumber                 = 'PT-RR-' + String.valueOf(DateTime.now().getTime()),
+    EnrollmentDate                   = Date.today(),
+    AccountId                        = demoAccount.Id,
+    ProgramId                        = programId,
+    Build_Certify__c                 = false,
+    Reseller__c                      = true,
+    Account_Software_Product_Cert__c = 0,
+    Account_Hardware_Product_Cert__c = 0,
+    Account_RHSC_Credentials__c      = 2,
+    Account_RHTSC_Credentials__c     = 0,
+    Account_RH_Certifications__c     = 0
+);
+
+LoyaltyProgramMember resellerA = new LoyaltyProgramMember(
+    MemberStatus                     = 'Active',
+    MemberType                       = 'Corporate',
+    MembershipNumber                 = 'PT-RA-' + String.valueOf(DateTime.now().getTime()),
+    EnrollmentDate                   = Date.today(),
+    AccountId                        = demoAccount.Id,
+    ProgramId                        = programId,
+    Build_Certify__c                 = false,
+    Reseller__c                      = true,
+    Account_Software_Product_Cert__c = 0,
+    Account_Hardware_Product_Cert__c = 0,
+    Account_RHSC_Credentials__c      = 3,
+    Account_RHTSC_Credentials__c     = 2,
+    Account_RH_Certifications__c     = 1
+);
+
+LoyaltyProgramMember resellerP = new LoyaltyProgramMember(
+    MemberStatus                     = 'Active',
+    MemberType                       = 'Corporate',
+    MembershipNumber                 = 'PT-RP-' + String.valueOf(DateTime.now().getTime()),
+    EnrollmentDate                   = Date.today(),
+    AccountId                        = demoAccount.Id,
+    ProgramId                        = programId,
+    Build_Certify__c                 = false,
+    Reseller__c                      = true,
+    Account_Software_Product_Cert__c = 0,
+    Account_Hardware_Product_Cert__c = 0,
+    Account_RHSC_Credentials__c      = 6,
+    Account_RHTSC_Credentials__c     = 4,
+    Account_RH_Certifications__c     = 2
+);
+
+insert new List<LoyaltyProgramMember>{ buildA, buildB, buildC, resellerU, resellerR, resellerA, resellerP };
 
 // 4) Attach points balances.
 insert new List<LoyaltyMemberCurrency>{
-    new LoyaltyMemberCurrency(Name = 'Demo Currency A', LoyaltyMemberId = demoA.Id, LoyaltyProgramCurrencyId = currencyId, TotalPointsAccrued = 28000),
-    new LoyaltyMemberCurrency(Name = 'Demo Currency B', LoyaltyMemberId = demoB.Id, LoyaltyProgramCurrencyId = currencyId, TotalPointsAccrued = 26000),
-    new LoyaltyMemberCurrency(Name = 'Demo Currency C', LoyaltyMemberId = demoC.Id, LoyaltyProgramCurrencyId = currencyId, TotalPointsAccrued = 55000)
+    new LoyaltyMemberCurrency(Name = 'Demo Currency Build A', LoyaltyMemberId = buildA.Id, LoyaltyProgramCurrencyId = currencyId, TotalPointsAccrued = 28000),
+    new LoyaltyMemberCurrency(Name = 'Demo Currency Build B', LoyaltyMemberId = buildB.Id, LoyaltyProgramCurrencyId = currencyId, TotalPointsAccrued = 26000),
+    new LoyaltyMemberCurrency(Name = 'Demo Currency Build C', LoyaltyMemberId = buildC.Id, LoyaltyProgramCurrencyId = currencyId, TotalPointsAccrued = 55000),
+    new LoyaltyMemberCurrency(Name = 'Demo Currency Reseller U', LoyaltyMemberId = resellerU.Id, LoyaltyProgramCurrencyId = currencyId, TotalPointsAccrued = 0),
+    new LoyaltyMemberCurrency(Name = 'Demo Currency Reseller R', LoyaltyMemberId = resellerR.Id, LoyaltyProgramCurrencyId = currencyId, TotalPointsAccrued = 20000),
+    new LoyaltyMemberCurrency(Name = 'Demo Currency Reseller A', LoyaltyMemberId = resellerA.Id, LoyaltyProgramCurrencyId = currencyId, TotalPointsAccrued = 50000),
+    new LoyaltyMemberCurrency(Name = 'Demo Currency Reseller P', LoyaltyMemberId = resellerP.Id, LoyaltyProgramCurrencyId = currencyId, TotalPointsAccrued = 120000)
 };
 
 // 5) Evaluate.
 TierEvaluationService svc = new TierEvaluationService();
-String tierA = svc.evaluatePartnerTier(demoA.Id);
-String tierB = svc.evaluatePartnerTier(demoB.Id);
-String tierC = svc.evaluatePartnerTier(demoC.Id);
 
-System.debug('=== Tier Evaluation Results (Custom Object Engine) ===');
-System.debug('Demo A (Sw cert path, 28k points)  => ' + tierA + ' [Expected: Advanced]');
-System.debug('Demo B (Full creds, 26k points)    => ' + tierB + ' [Expected: Advanced]');
-System.debug('Demo C (Certs only, 55k points)    => ' + tierC + ' [Expected: Advanced]');
+System.debug('=== Tier Evaluation Results (Points In Condition Rows) ===');
+System.debug('Build A (Sw cert path, 28k points)       => ' + svc.evaluatePartnerTier(buildA.Id) + ' [Expected: Advanced]');
+System.debug('Build B (Full creds path, 26k points)    => ' + svc.evaluatePartnerTier(buildB.Id) + ' [Expected: Advanced]');
+System.debug('Build C (Cert path, 55k points)          => ' + svc.evaluatePartnerTier(buildC.Id) + ' [Expected: Advanced]');
+System.debug('Reseller U (0 pts, <2 seller creds)      => ' + svc.evaluatePartnerTier(resellerU.Id) + ' [Expected: Unaffiliated]');
+System.debug('Reseller R (20k pts, 2 seller creds)     => ' + svc.evaluatePartnerTier(resellerR.Id) + ' [Expected: Ready]');
+System.debug('Reseller A (50k pts + advanced creds)    => ' + svc.evaluatePartnerTier(resellerA.Id) + ' [Expected: Advanced]');
+System.debug('Reseller P (120k pts + premier creds)    => ' + svc.evaluatePartnerTier(resellerP.Id) + ' [Expected: Premier]');

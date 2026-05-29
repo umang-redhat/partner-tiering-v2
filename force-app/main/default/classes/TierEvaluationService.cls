@@ -4,12 +4,15 @@
  *
  *              Evaluation model:
  *              - Rule version must be Active and inside effective date window.
- *              - Points gate always runs first.
- *              - Otherwise, OR groups are evaluated; each group supports nested logic:
+ *              - OR groups are evaluated; each group supports nested logic:
  *                OR inside a bucket and AND across buckets (bucket key = Condition_Order__c).
+ *              - Points are evaluated as condition rows via MinimumEligibleBalance/MaximumEligibleBalance.
  *              - Highest qualifying Tier_Rank__c across enrolled modules wins.
  */
 public with sharing class TierEvaluationService {
+
+    private static final String FIELD_MIN_ELIGIBLE_BALANCE = 'MinimumEligibleBalance';
+    private static final String FIELD_MAX_ELIGIBLE_BALANCE = 'MaximumEligibleBalance';
 
     private static final Map<String, String> MODULE_FIELD_MAP = new Map<String, String>{
         'Build_Certify__c' => 'Build',
@@ -26,7 +29,6 @@ public with sharing class TierEvaluationService {
                    Module__c,
                    Tier__c,
                    Tier_Rank__c,
-                   Min_Points__c,
                    In_Effect_Date__c
             FROM PartnerTierRuleVersion__c
             WHERE Status__c = 'Active'
@@ -37,7 +39,7 @@ public with sharing class TierEvaluationService {
         Map<Id, List<PartnerTierRuleGroup__c>> groupsByVersion = loadGroupsByVersion(activeVersions);
         Map<Id, List<PartnerTierRuleCondition__c>> conditionsByGroup = loadConditionsByGroup(groupsByVersion);
 
-        Integer highestRank = 0;
+        Integer highestRank = -1;
         String highestTier;
 
         for (String moduleEnrollmentField : MODULE_FIELD_MAP.keySet()) {
@@ -50,10 +52,7 @@ public with sharing class TierEvaluationService {
                 if (version.Module__c != moduleName) {
                     continue;
                 }
-                if (!meetsPointThreshold(partnerPoints, version.Min_Points__c)) {
-                    continue;
-                }
-                if (!meetsCredentialGate(lpm, version, groupsByVersion, conditionsByGroup)) {
+                if (!meetsConditionGate(lpm, partnerPoints, version, groupsByVersion, conditionsByGroup)) {
                     continue;
                 }
 
@@ -108,7 +107,12 @@ public with sharing class TierEvaluationService {
         }
 
         for (PartnerTierRuleCondition__c c : [
-            SELECT Id, Rule_Group__c, Condition_Order__c, Field_API_Name__c, Operator__c, Threshold__c
+            SELECT Id,
+                   Rule_Group__c,
+                   Condition_Order__c,
+                   Field_API_Name__c,
+                   Operator__c,
+                   Threshold__c
             FROM PartnerTierRuleCondition__c
             WHERE Rule_Group__c IN :groupIds
             ORDER BY Condition_Order__c ASC, CreatedDate ASC
@@ -156,20 +160,17 @@ public with sharing class TierEvaluationService {
         return pointsBalance > totalAccrued ? pointsBalance : totalAccrued;
     }
 
-    private Boolean meetsPointThreshold(Decimal partnerPoints, Decimal requiredPoints) {
-        return partnerPoints >= (requiredPoints == null ? 0 : requiredPoints);
-    }
-
-    private Boolean meetsCredentialGate(
+    private Boolean meetsConditionGate(
         LoyaltyProgramMember lpm,
+        Decimal partnerPoints,
         PartnerTierRuleVersion__c version,
         Map<Id, List<PartnerTierRuleGroup__c>> groupsByVersion,
         Map<Id, List<PartnerTierRuleCondition__c>> conditionsByGroup
     ) {
         List<PartnerTierRuleGroup__c> groups = groupsByVersion.get(version.Id);
         if (groups == null || groups.isEmpty()) {
-            // No condition groups means points-only behavior.
-            return true;
+            // No condition groups means this version is not yet configured.
+            return false;
         }
 
         // OR across groups
@@ -178,7 +179,7 @@ public with sharing class TierEvaluationService {
             if (conditions == null || conditions.isEmpty()) {
                 continue;
             }
-            if (allConditionsMatch(lpm, conditions)) {
+            if (allConditionsMatch(lpm, partnerPoints, conditions)) {
                 return true;
             }
         }
@@ -187,6 +188,7 @@ public with sharing class TierEvaluationService {
 
     private Boolean allConditionsMatch(
         LoyaltyProgramMember lpm,
+        Decimal partnerPoints,
         List<PartnerTierRuleCondition__c> conditions
     ) {
         // Supports nested structures by treating Condition_Order__c as an AND bucket id:
@@ -198,7 +200,7 @@ public with sharing class TierEvaluationService {
         //   Group B: (order=1: [5]) AND (order=2: [6])
         Map<Integer, List<PartnerTierRuleCondition__c>> conditionsByBucket = new Map<Integer, List<PartnerTierRuleCondition__c>>();
         for (PartnerTierRuleCondition__c c : conditions) {
-            if (String.isBlank(c.Field_API_Name__c) || String.isBlank(c.Operator__c) || c.Threshold__c == null) {
+            if (!isConditionComplete(c)) {
                 return false;
             }
             Integer bucket = c.Condition_Order__c == null ? 1 : Integer.valueOf(c.Condition_Order__c);
@@ -216,8 +218,9 @@ public with sharing class TierEvaluationService {
         for (Integer bucket : conditionsByBucket.keySet()) {
             Boolean bucketMatched = false;
             for (PartnerTierRuleCondition__c c : conditionsByBucket.get(bucket)) {
-                Decimal actual = parseDecimal(lpm.get(c.Field_API_Name__c));
-                if (compare(actual, c.Operator__c, c.Threshold__c)) {
+                Decimal actual = resolveConditionActualValue(lpm, partnerPoints, c.Field_API_Name__c);
+                Decimal expected = resolveConditionExpectedValue(c);
+                if (compare(actual, c.Operator__c, expected)) {
                     bucketMatched = true;
                     break;
                 }
@@ -227,6 +230,34 @@ public with sharing class TierEvaluationService {
             }
         }
         return true;
+    }
+
+    private Boolean isConditionComplete(PartnerTierRuleCondition__c conditionRec) {
+        if (String.isBlank(conditionRec.Field_API_Name__c) || String.isBlank(conditionRec.Operator__c)) {
+            return false;
+        }
+        if (conditionRec.Field_API_Name__c == FIELD_MIN_ELIGIBLE_BALANCE) {
+            return conditionRec.Threshold__c != null;
+        }
+        if (conditionRec.Field_API_Name__c == FIELD_MAX_ELIGIBLE_BALANCE) {
+            return conditionRec.Threshold__c != null;
+        }
+        return conditionRec.Threshold__c != null;
+    }
+
+    private Decimal resolveConditionActualValue(
+        LoyaltyProgramMember lpm,
+        Decimal partnerPoints,
+        String fieldApiName
+    ) {
+        if (fieldApiName == FIELD_MIN_ELIGIBLE_BALANCE || fieldApiName == FIELD_MAX_ELIGIBLE_BALANCE) {
+            return partnerPoints == null ? 0 : partnerPoints;
+        }
+        return parseDecimal(lpm.get(fieldApiName));
+    }
+
+    private Decimal resolveConditionExpectedValue(PartnerTierRuleCondition__c conditionRec) {
+        return conditionRec.Threshold__c;
     }
 
     private Decimal parseDecimal(Object valueObj) {
