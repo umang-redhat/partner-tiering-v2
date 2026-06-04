@@ -5,7 +5,6 @@ public with sharing class PartnerTierRuleBuilderController {
     private static final String FIELD_MIN_ELIGIBLE_BALANCE = 'MinimumEligibleBalance';
     private static final String FIELD_MAX_ELIGIBLE_BALANCE = 'MaximumEligibleBalance';
 
-
     public class RuleConditionDTO {
         @AuraEnabled public Id id;
         @AuraEnabled public Integer conditionOrder;
@@ -181,8 +180,9 @@ public with sharing class PartnerTierRuleBuilderController {
                 PartnerTierRuleGroup__c up = new PartnerTierRuleGroup__c();
                 if (incoming.id != null) {
                     up.Id = incoming.id;
+                } else {
+                    up.Rule_Version__c = ruleVersionId;
                 }
-                up.Rule_Version__c = ruleVersionId;
                 up.Group_Order__c = incoming.groupOrder;
                 groupsToUpsert.add(up);
 
@@ -232,54 +232,62 @@ public with sharing class PartnerTierRuleBuilderController {
                 delete groupsToDelete;
             }
 
-            // Upsert/delete conditions per group.
+            // Bulk-load all existing conditions for kept groups (single SOQL).
+            Map<Id, List<PartnerTierRuleCondition__c>> existingCondsByGroup = new Map<Id, List<PartnerTierRuleCondition__c>>();
+            for (Id gId : keptGroupIds) {
+                existingCondsByGroup.put(gId, new List<PartnerTierRuleCondition__c>());
+            }
+            for (PartnerTierRuleCondition__c ec : [
+                SELECT Id, Rule_Group__c
+                FROM PartnerTierRuleCondition__c
+                WHERE Rule_Group__c IN :keptGroupIds
+            ]) {
+                existingCondsByGroup.get(ec.Rule_Group__c).add(ec);
+            }
+
+            List<PartnerTierRuleCondition__c> allCondsToUpsert = new List<PartnerTierRuleCondition__c>();
+            List<PartnerTierRuleCondition__c> allCondsToDelete = new List<PartnerTierRuleCondition__c>();
+            Set<Id> allKeptCondIds = new Set<Id>();
+
             for (Id groupId : incomingConditionsByGroup.keySet()) {
-                List<RuleConditionDTO> incomingConds = incomingConditionsByGroup.get(groupId);
-                Map<Id, PartnerTierRuleCondition__c> existingConds = new Map<Id, PartnerTierRuleCondition__c>([
-                    SELECT Id
-                    FROM PartnerTierRuleCondition__c
-                    WHERE Rule_Group__c = :groupId
-                ]);
-
-                List<PartnerTierRuleCondition__c> condsToUpsert = new List<PartnerTierRuleCondition__c>();
-                Set<Id> keptCondIds = new Set<Id>();
-
-                for (RuleConditionDTO c : incomingConds) {
+                for (RuleConditionDTO c : incomingConditionsByGroup.get(groupId)) {
                     if (String.isBlank(c.fieldApiName) || String.isBlank(c.operatorValue) || c.threshold == null) {
                         continue;
                     }
                     PartnerTierRuleCondition__c rec = new PartnerTierRuleCondition__c();
                     if (c.id != null) {
                         rec.Id = c.id;
-                        keptCondIds.add(c.id);
+                        allKeptCondIds.add(c.id);
                     } else {
-                        // Rule_Group__c is non-reparentable master-detail; set only for inserts.
                         rec.Rule_Group__c = groupId;
                     }
                     rec.Condition_Order__c = c.conditionOrder;
                     rec.Field_API_Name__c = c.fieldApiName;
                     rec.Operator__c = c.operatorValue;
                     rec.Threshold__c = c.threshold;
-                    condsToUpsert.add(rec);
-                }
-
-                if (!condsToUpsert.isEmpty()) {
-                    upsert condsToUpsert;
-                    for (PartnerTierRuleCondition__c cUp : condsToUpsert) {
-                        keptCondIds.add(cUp.Id);
-                    }
-                }
-
-                List<PartnerTierRuleCondition__c> condsToDelete = new List<PartnerTierRuleCondition__c>();
-                for (PartnerTierRuleCondition__c ex : existingConds.values()) {
-                    if (!keptCondIds.contains(ex.Id)) {
-                        condsToDelete.add(ex);
-                    }
-                }
-                if (!condsToDelete.isEmpty()) {
-                    delete condsToDelete;
+                    allCondsToUpsert.add(rec);
                 }
             }
+
+            if (!allCondsToUpsert.isEmpty()) {
+                upsert allCondsToUpsert;
+                for (PartnerTierRuleCondition__c cUp : allCondsToUpsert) {
+                    allKeptCondIds.add(cUp.Id);
+                }
+            }
+
+            for (List<PartnerTierRuleCondition__c> ecList : existingCondsByGroup.values()) {
+                for (PartnerTierRuleCondition__c ex : ecList) {
+                    if (!allKeptCondIds.contains(ex.Id)) {
+                        allCondsToDelete.add(ex);
+                    }
+                }
+            }
+            if (!allCondsToDelete.isEmpty()) {
+                delete allCondsToDelete;
+            }
+        } catch (AuraHandledException ahe) {
+            throw ahe;
         } catch (Exception e) {
             throw new AuraHandledException(
                 'Save failed: ' + e.getTypeName() + ' - ' + e.getMessage()

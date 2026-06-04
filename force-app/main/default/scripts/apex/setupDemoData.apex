@@ -303,14 +303,22 @@ insert new List<LoyaltyMemberCurrency>{
     new LoyaltyMemberCurrency(Name = 'Demo Currency Reseller P', LoyaltyMemberId = resellerP.Id, LoyaltyProgramCurrencyId = currencyId, TotalPointsAccrued = 120000)
 };
 
-// 5) Evaluate.
+// 5) Evaluate — per-module results.
 TierEvaluationService svc = new TierEvaluationService();
 
-System.debug('=== Tier Evaluation Results (Points In Condition Rows) ===');
-System.debug('Build A (Sw cert path, 28k points)       => ' + svc.evaluatePartnerTier(buildA.Id) + ' [Expected: Advanced]');
-System.debug('Build B (Full creds path, 26k points)    => ' + svc.evaluatePartnerTier(buildB.Id) + ' [Expected: Advanced]');
-System.debug('Build C (Cert path, 55k points)          => ' + svc.evaluatePartnerTier(buildC.Id) + ' [Expected: Advanced]');
-System.debug('Reseller U (0 pts, <2 seller creds)      => ' + svc.evaluatePartnerTier(resellerU.Id) + ' [Expected: Unaffiliated]');
-System.debug('Reseller R (20k pts, 2 seller creds)     => ' + svc.evaluatePartnerTier(resellerR.Id) + ' [Expected: Ready]');
-System.debug('Reseller A (50k pts + advanced creds)    => ' + svc.evaluatePartnerTier(resellerA.Id) + ' [Expected: Advanced]');
-System.debug('Reseller P (120k pts + premier creds)    => ' + svc.evaluatePartnerTier(resellerP.Id) + ' [Expected: Premier]');
+System.debug('=== Per-Module Tier Evaluation Results ===');
+for (LoyaltyProgramMember m : new List<LoyaltyProgramMember>{ buildA, buildB, buildC, resellerU, resellerR, resellerA, resellerP }) {
+    Map<String, TierEvaluationService.TierResult> results = svc.evaluatePartnerTiers(m.Id);
+    String line = 'Member ' + m.MembershipNumber + ' => ';
+    if (results.isEmpty()) {
+        line += 'No qualifying tier';
+    } else {
+        List<String> parts = new List<String>();
+        for (TierEvaluationService.TierResult tr : results.values()) {
+            parts.add(tr.moduleName + ':' + tr.tierName + '(rank ' + tr.tierRank + ')');
+        }
+        line += String.join(parts, ', ');
+    }
+    line += ' | Overall: ' + svc.pickOverallHighest(results);
+    System.debug(line);
+}
