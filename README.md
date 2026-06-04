@@ -10,6 +10,8 @@ Salesforce DX project for a configurable partner-tier evaluation engine on top o
   - `PartnerTierRuleCondition__c`
 - Apex evaluation engine:
   - `TierEvaluationService`
+- Batch evaluation job:
+  - `TierEvaluationBatch`
 - Business-user condition builder UI:
   - `partnerTierConditionBuilder` LWC on `PartnerTierRuleVersion__c` record page
 - Permission-set driven access:
@@ -78,11 +80,50 @@ The filter logic is compiled into the internal group/condition storage model for
 `TierEvaluationService` evaluates in this order:
 
 1. Active/effective rule versions (`Status='Active'`, `In_Effect_Date__c <= today`)
-2. Points threshold (`Min_Points__c`)
-3. Condition gate (compiled OR-groups and AND-buckets)
-4. Highest qualified `Tier_Rank__c` across enrolled modules wins
+2. Condition gate (compiled OR-groups and AND-buckets)
+3. Points checks from condition rows:
+   - `MinimumEligibleBalance`
+   - `MaximumEligibleBalance`
+4. Best tier is selected **per enrolled module** (for example `Build` and `Reseller`)
+5. Backward-compatible helper can still pick overall highest across modules
+
+### Performance notes
+
+- Rules are loaded once into a reusable in-memory `RuleContext`.
+- Rule versions are indexed by module and evaluated in descending rank order for early exit.
+- Condition actual values are cached per member during evaluation.
+- Batch path loads member points in bulk and evaluates members without SOQL in the hot loop.
+
+## Batch usage
+
+Run tier evaluation for active enrolled members:
+
+```bash
+sf apex run --target-org loyaltytrial2 --code "Database.executeBatch(new TierEvaluationBatch(), 200);"
+```
+
+## Tests
+
+Run partner-tiering tests only:
+
+```bash
+sf apex run test \
+  --target-org loyaltytrial2 \
+  --tests PartnerTierRuleBuilderControllerTest \
+  --tests RuleVersionValidationTest \
+  --tests TierEvaluationServiceTest \
+  --tests TierEvaluationBatchTest \
+  --result-format human \
+  --code-coverage
+```
+
+Run all local tests:
+
+```bash
+sf apex run test --target-org loyaltytrial2 --test-level RunLocalTests --result-format human --code-coverage
+```
 
 ## Notes
 
-- Some optional fields may not be runtime-visible in certain orgs due to metadata provisioning anomalies.
-- The current implementation includes safe fallbacks so evaluation still runs for seeded scenarios.
+- The current implementation stores points thresholds in `Threshold__c` with logical field names
+  (`MinimumEligibleBalance` / `MaximumEligibleBalance`) to remain resilient in orgs with metadata visibility anomalies.
