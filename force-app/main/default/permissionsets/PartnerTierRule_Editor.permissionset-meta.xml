@@ -21,16 +21,6 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
-        <field>LoyaltyProgramMember.Distributor__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>LoyaltyProgramMember.Sell_With__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
         <field>LoyaltyProgramMember.Account_Software_Product_Cert__c</field>
         <readable>true</readable>
     </fieldPermissions>

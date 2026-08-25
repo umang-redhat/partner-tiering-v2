@@ -4,12 +4,9 @@
 public with sharing class PartnerTierRuleVersionTriggerHandler {
 
     /**
-     * @description Validates release-window overlap for active rule versions.
+     * @description Validates duplicate active versions before insert/update.
      */
-    public static void handleBefore(
-        List<PartnerTierRuleVersion__c> newRecords,
-        Map<Id, PartnerTierRuleVersion__c> oldMap
-    ) {
-        PartnerTierRuleVersionValidationService.validateNoOverlaps(newRecords);
+    public static void handleBefore(List<PartnerTierRuleVersion__c> newRecords) {
+        PartnerTierRuleVersionValidationService.validateNoDuplicateActiveVersions(newRecords);
     }
 }

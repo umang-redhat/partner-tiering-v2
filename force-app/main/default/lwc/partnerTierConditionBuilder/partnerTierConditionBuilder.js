@@ -14,7 +14,12 @@ export default class PartnerTierConditionBuilder extends LightningElement {
     @track fieldOptions = [];
     @track operatorOptions = [];
     @track isLoading = true;
+    @track isSaving = false;
     @track errorMessage;
+
+    get isBusy() {
+        return this.isLoading || this.isSaving;
+    }
 
     sequence = 0;
     suppressLogicAutoUpdate = false;
@@ -188,7 +193,7 @@ export default class PartnerTierConditionBuilder extends LightningElement {
             return;
         }
 
-        this.isLoading = true;
+        this.isSaving = true;
         this.errorMessage = null;
         try {
             await saveRuleVersionGraph({
@@ -202,7 +207,7 @@ export default class PartnerTierConditionBuilder extends LightningElement {
             this.errorMessage = this.reduceError(e);
             this.showToast('Save Failed', this.errorMessage, 'error');
         } finally {
-            this.isLoading = false;
+            this.isSaving = false;
         }
     }
 

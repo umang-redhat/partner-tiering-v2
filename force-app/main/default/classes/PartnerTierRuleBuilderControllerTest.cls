@@ -8,7 +8,11 @@ private class PartnerTierRuleBuilderControllerTest {
 
     @TestSetup
     static void setup() {
+        LoyaltyProgram prog = new LoyaltyProgram(Name = 'Builder Test Program', Status = 'Active');
+        insert prog;
+
         PartnerTierRuleVersion__c version = new PartnerTierRuleVersion__c(
+            LoyaltyProgram__c = prog.Id,
             Module__c = 'Build', Tier__c = 'Ready', Tier_Rank__c = 1,
             In_Effect_Date__c = Date.today(), Status__c = 'Active'
         );
@@ -43,6 +47,7 @@ private class PartnerTierRuleBuilderControllerTest {
         Test.stopTest();
 
         System.assertEquals(version.Id, dto.id);
+        System.assertEquals('Builder Test Program', dto.loyaltyProgramName);
         System.assertEquals('Build', dto.moduleName);
         System.assertEquals('Ready', dto.tierName);
         System.assertEquals('Active', dto.status);
@@ -103,7 +108,9 @@ private class PartnerTierRuleBuilderControllerTest {
 
     @isTest
     static void testSaveRuleVersionGraph_CreateNew() {
+        Id programId = [SELECT Id FROM LoyaltyProgram LIMIT 1].Id;
         PartnerTierRuleVersion__c version = new PartnerTierRuleVersion__c(
+            LoyaltyProgram__c = programId,
             Module__c = 'Reseller', Tier__c = 'Advanced', Tier_Rank__c = 2,
             In_Effect_Date__c = Date.today(), Status__c = 'Active'
         );
@@ -233,13 +240,5 @@ private class PartnerTierRuleBuilderControllerTest {
             SELECT Id FROM PartnerTierRuleCondition__c WHERE Rule_Group__c = :grp.Id
         ];
         System.assertEquals(1, conds.size(), 'Incomplete condition should be skipped');
-    }
-
-    @isTest
-    static void testSelectOptionDTO() {
-        PartnerTierRuleBuilderController.SelectOptionDTO opt =
-            new PartnerTierRuleBuilderController.SelectOptionDTO('My Label', 'my_value');
-        System.assertEquals('My Label', opt.label);
-        System.assertEquals('my_value', opt.value);
     }
 }

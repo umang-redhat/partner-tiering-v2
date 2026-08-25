@@ -1,8 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
     <types>
-        <members>Partner_Tier_Rule__mdt</members>
-        <name>CustomObject</name>
+        <members>PartnerTierRuleVersion__c.Min_Points__c</members>
+        <members>PartnerTierRuleVersion__c.Is_Points_Only__c</members>
+        <members>PartnerTierRuleCondition__c.MinimumEligibleBalance__c</members>
+        <members>PartnerTierRuleCondition__c.MaximumEligibleBalance__c</members>
+        <members>PartnerTierRuleGroup__c.Group_Label__c</members>
+        <name>CustomField</name>
+    </types>
+    <types>
+        <members>PartnerTierRuleVersion__c.Active_Requires_Effective_Window</members>
+        <members>PartnerTierRuleVersion__c.Valid_Deactivation_Window</members>
+        <name>ValidationRule</name>
+    </types>
+    <types>
+        <members>Partner_Tiering_Field_Access</members>
+        <name>PermissionSet</name>
     </types>
     <version>62.0</version>
 </Package>

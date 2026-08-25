@@ -1,41 +1,100 @@
 /**
- * Demo data setup for custom-object rule model:
+ * Demo data setup for the full partner-tiering flow:
+ * LoyaltyProgram -> LoyaltyProgramCurrency -> LoyaltyProgramMember/LoyaltyMemberCurrency
+ * plus partner-tier rule data:
  * PartnerTierRuleVersion__c -> PartnerTierRuleGroup__c -> PartnerTierRuleCondition__c.
  *
- * This version seeds points as condition rows (MinimumEligibleBalance/MaximumEligibleBalance) instead of
- * relying on Min_Points__c gates at the rule-version level.
+ * This script is self-contained and rerunnable. It creates or reuses a dedicated
+ * demo LoyaltyProgram and program currency, resets prior demo members, then seeds
+ * rules, balances, and evaluation output.
  */
 
-// 1) Resolve an active LoyaltyProgram and one currency.
-List<LoyaltyProgram> progs = [
-    SELECT Id
+String demoProgramName = 'Partner Tiering Demo Program';
+String demoCurrencyName = 'Partner Tiering Demo Points';
+String demoAccountName = 'Partner Tiering Demo Account';
+
+// 1) Create or reuse a dedicated demo LoyaltyProgram and currency.
+LoyaltyProgram demoProgram;
+List<LoyaltyProgram> existingPrograms = [
+    SELECT Id, Name, Status, Type
     FROM LoyaltyProgram
-    WHERE Type = 'LOYALTY_PROGRAM' AND Status = 'Active'
-    ORDER BY IsPrimary DESC
+    WHERE Name = :demoProgramName
     LIMIT 1
 ];
-if (progs.isEmpty()) {
-    throw new System.HandledException('No active LOYALTY_PROGRAM found in this org.');
+if (existingPrograms.isEmpty()) {
+    demoProgram = new LoyaltyProgram(
+        Name = demoProgramName,
+        Type = 'LOYALTY_PROGRAM',
+        Status = 'Active'
+    );
+    insert demoProgram;
+} else {
+    demoProgram = existingPrograms[0];
+    if (demoProgram.Status != 'Active') {
+        demoProgram.Status = 'Active';
+        update demoProgram;
+    }
 }
-Id programId = progs[0].Id;
+Id programId = demoProgram.Id;
 
-List<LoyaltyProgramCurrency> currencies = [
+LoyaltyProgramCurrency demoCurrency;
+List<LoyaltyProgramCurrency> existingCurrencies = [
     SELECT Id, Name
     FROM LoyaltyProgramCurrency
     WHERE LoyaltyProgramId = :programId
-    ORDER BY Name
+    AND Name = :demoCurrencyName
     LIMIT 1
 ];
-if (currencies.isEmpty()) {
-    throw new System.HandledException('No LoyaltyProgramCurrency found for program ' + programId);
+if (existingCurrencies.isEmpty()) {
+    demoCurrency = new LoyaltyProgramCurrency(
+        LoyaltyProgramId = programId,
+        Name = demoCurrencyName,
+        CurrencyType = 'NonQualifying',
+        ExpiryPeriodFrequency = 1,
+        ExpiryModel = 'Fixed',
+        ExpiryPeriodUnit = 'Years',
+        ExtendExpiration = 'None'
+    );
+    insert demoCurrency;
+} else {
+    demoCurrency = existingCurrencies[0];
 }
-Id currencyId = currencies[0].Id;
+Id currencyId = demoCurrency.Id;
 
-// 2) Reset and seed Build/Reseller rule versions for demo.
+// 2) Remove prior demo members/currencies for a clean rerun.
+List<Account> existingDemoAccounts = [
+    SELECT Id
+    FROM Account
+    WHERE Name = :demoAccountName
+];
+if (!existingDemoAccounts.isEmpty()) {
+    Set<Id> demoAccountIds = new Map<Id, Account>(existingDemoAccounts).keySet();
+    List<LoyaltyProgramMember> existingMembers = [
+        SELECT Id
+        FROM LoyaltyProgramMember
+        WHERE AccountId IN :demoAccountIds
+    ];
+    if (!existingMembers.isEmpty()) {
+        Set<Id> existingMemberIds = new Map<Id, LoyaltyProgramMember>(existingMembers).keySet();
+        List<LoyaltyMemberCurrency> existingBalances = [
+            SELECT Id
+            FROM LoyaltyMemberCurrency
+            WHERE LoyaltyMemberId IN :existingMemberIds
+        ];
+        if (!existingBalances.isEmpty()) {
+            delete existingBalances;
+        }
+        delete existingMembers;
+    }
+    delete existingDemoAccounts;
+}
+
+// 3) Reset and seed Build/Reseller rule versions for demo.
 List<PartnerTierRuleVersion__c> existingVersions = [
     SELECT Id
     FROM PartnerTierRuleVersion__c
-    WHERE Module__c IN ('Build', 'Reseller')
+    WHERE LoyaltyProgram__c = :programId
+    AND Module__c IN ('Build', 'Reseller')
 ];
 if (!existingVersions.isEmpty()) {
     delete existingVersions;
@@ -45,6 +104,7 @@ Date todayDate = Date.today();
 
 List<PartnerTierRuleVersion__c> seededVersions = new List<PartnerTierRuleVersion__c>{
     new PartnerTierRuleVersion__c(
+        LoyaltyProgram__c = programId,
         Module__c = 'Build',
         Tier__c = 'Ready',
         Tier_Rank__c = 1,
@@ -52,6 +112,7 @@ List<PartnerTierRuleVersion__c> seededVersions = new List<PartnerTierRuleVersion
         Status__c = 'Active'
     ),
     new PartnerTierRuleVersion__c(
+        LoyaltyProgram__c = programId,
         Module__c = 'Build',
         Tier__c = 'Advanced',
         Tier_Rank__c = 2,
@@ -59,6 +120,7 @@ List<PartnerTierRuleVersion__c> seededVersions = new List<PartnerTierRuleVersion
         Status__c = 'Active'
     ),
     new PartnerTierRuleVersion__c(
+        LoyaltyProgram__c = programId,
         Module__c = 'Build',
         Tier__c = 'Premier',
         Tier_Rank__c = 3,
@@ -66,6 +128,7 @@ List<PartnerTierRuleVersion__c> seededVersions = new List<PartnerTierRuleVersion
         Status__c = 'Active'
     ),
     new PartnerTierRuleVersion__c(
+        LoyaltyProgram__c = programId,
         Module__c = 'Reseller',
         Tier__c = 'Unaffiliated',
         Tier_Rank__c = 1,
@@ -73,6 +136,7 @@ List<PartnerTierRuleVersion__c> seededVersions = new List<PartnerTierRuleVersion
         Status__c = 'Active'
     ),
     new PartnerTierRuleVersion__c(
+        LoyaltyProgram__c = programId,
         Module__c = 'Reseller',
         Tier__c = 'Ready',
         Tier_Rank__c = 2,
@@ -80,6 +144,7 @@ List<PartnerTierRuleVersion__c> seededVersions = new List<PartnerTierRuleVersion
         Status__c = 'Active'
     ),
     new PartnerTierRuleVersion__c(
+        LoyaltyProgram__c = programId,
         Module__c = 'Reseller',
         Tier__c = 'Advanced',
         Tier_Rank__c = 3,
@@ -87,6 +152,7 @@ List<PartnerTierRuleVersion__c> seededVersions = new List<PartnerTierRuleVersion
         Status__c = 'Active'
     ),
     new PartnerTierRuleVersion__c(
+        LoyaltyProgram__c = programId,
         Module__c = 'Reseller',
         Tier__c = 'Premier',
         Tier_Rank__c = 4,
@@ -174,8 +240,8 @@ insert new List<PartnerTierRuleCondition__c>{
     new PartnerTierRuleCondition__c(Rule_Group__c = groupByKey.get('Reseller|Premier|1'), Condition_Order__c = 4, Field_API_Name__c = 'Account_RH_Certifications__c', Operator__c = '>=', Threshold__c = 2)
 };
 
-// 3) Create demo members.
-Account demoAccount = new Account(Name = 'Partner Tiering Demo Account');
+// 4) Create demo members.
+Account demoAccount = new Account(Name = demoAccountName);
 insert demoAccount;
 
 LoyaltyProgramMember buildA = new LoyaltyProgramMember(
@@ -292,7 +358,7 @@ LoyaltyProgramMember resellerP = new LoyaltyProgramMember(
 
 insert new List<LoyaltyProgramMember>{ buildA, buildB, buildC, resellerU, resellerR, resellerA, resellerP };
 
-// 4) Attach points balances.
+// 5) Attach points balances.
 insert new List<LoyaltyMemberCurrency>{
     new LoyaltyMemberCurrency(Name = 'Demo Currency Build A', LoyaltyMemberId = buildA.Id, LoyaltyProgramCurrencyId = currencyId, TotalPointsAccrued = 28000),
     new LoyaltyMemberCurrency(Name = 'Demo Currency Build B', LoyaltyMemberId = buildB.Id, LoyaltyProgramCurrencyId = currencyId, TotalPointsAccrued = 26000),
@@ -303,14 +369,27 @@ insert new List<LoyaltyMemberCurrency>{
     new LoyaltyMemberCurrency(Name = 'Demo Currency Reseller P', LoyaltyMemberId = resellerP.Id, LoyaltyProgramCurrencyId = currencyId, TotalPointsAccrued = 120000)
 };
 
-// 5) Evaluate — per-module results.
+// 6) Evaluate — per-module results using bulk-ready API.
 TierEvaluationService svc = new TierEvaluationService();
+TierEvaluationService.RuleContext ctx = svc.loadRuleContext();
+
+List<LoyaltyProgramMember> demoMembers = new List<LoyaltyProgramMember>{
+    buildA, buildB, buildC, resellerU, resellerR, resellerA, resellerP
+};
+
+Set<Id> memberIds = new Set<Id>();
+for (LoyaltyProgramMember memberRec : demoMembers) {
+    memberIds.add(memberRec.Id);
+}
+Map<Id, Decimal> pointsByMember = svc.bulkLoadPointBalances(memberIds);
+Map<Id, Map<String, TierEvaluationService.TierResult>> resultsByMember =
+    svc.evaluateMembers(demoMembers, pointsByMember, ctx);
 
 System.debug('=== Per-Module Tier Evaluation Results ===');
-for (LoyaltyProgramMember m : new List<LoyaltyProgramMember>{ buildA, buildB, buildC, resellerU, resellerR, resellerA, resellerP }) {
-    Map<String, TierEvaluationService.TierResult> results = svc.evaluatePartnerTiers(m.Id);
+for (LoyaltyProgramMember m : demoMembers) {
+    Map<String, TierEvaluationService.TierResult> results = resultsByMember.get(m.Id);
     String line = 'Member ' + m.MembershipNumber + ' => ';
-    if (results.isEmpty()) {
+    if (results == null || results.isEmpty()) {
         line += 'No qualifying tier';
     } else {
         List<String> parts = new List<String>();

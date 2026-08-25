@@ -8,6 +8,7 @@
             <template if:true={versionInfo}>
                 <div class="slds-box slds-theme_default slds-m-bottom_medium">
                     <p class="slds-text-title_caps slds-m-bottom_x-small">Rule Version Context</p>
+                    <p><strong>Loyalty Program:</strong> {versionInfo.loyaltyProgramName}</p>
                     <p><strong>Module:</strong> {versionInfo.moduleName}</p>
                     <p><strong>Tier:</strong> {versionInfo.tierName}</p>
                     <p><strong>Status:</strong> {versionInfo.status}</p>
@@ -16,7 +17,7 @@
             </template>
 
             <div class="slds-m-bottom_medium">
-                <lightning-button variant="brand-outline" label="+ Add Condition Row" onclick={handleAddCondition}></lightning-button>
+                <lightning-button variant="brand-outline" label="+ Add Condition Row" onclick={handleAddCondition} disabled={isBusy}></lightning-button>
             </div>
 
             <template if:false={hasConditions}>
@@ -73,10 +74,6 @@
                 </div>
             </template>
 
-            <div class="slds-m-bottom_medium">
-                <lightning-button variant="neutral" label="+ Add Condition Row" onclick={handleAddCondition}></lightning-button>
-            </div>
-
             <div class="slds-m-top_medium slds-m-bottom_medium">
                 <lightning-textarea
                     label="Filter Logic"
@@ -94,8 +91,8 @@
             </template>
 
             <div class="slds-m-top_medium">
-                <lightning-button class="slds-m-right_small" variant="neutral" label="Validate Logic" onclick={handleValidateLogic}></lightning-button>
-                <lightning-button variant="brand" label="Save Condition Model" onclick={handleSave}></lightning-button>
+                <lightning-button class="slds-m-right_small" variant="neutral" label="Validate Logic" onclick={handleValidateLogic} disabled={isBusy}></lightning-button>
+                <lightning-button variant="brand" label="Save Condition Model" onclick={handleSave} disabled={isBusy}></lightning-button>
             </div>
         </div>
     </lightning-card>

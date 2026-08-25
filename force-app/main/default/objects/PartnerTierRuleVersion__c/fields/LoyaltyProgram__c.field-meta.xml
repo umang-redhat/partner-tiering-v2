@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>LoyaltyProgram__c</fullName>
+    <deleteConstraint>Restrict</deleteConstraint>
+    <description>Loyalty program this tier rule version belongs to.</description>
+    <externalId>false</externalId>
+    <label>Loyalty Program</label>
+    <referenceTo>LoyaltyProgram</referenceTo>
+    <relationshipLabel>Partner Tier Rule Versions</relationshipLabel>
+    <relationshipName>Partner_Tier_Rule_Versions</relationshipName>
+    <required>true</required>
+    <trackFeedHistory>false</trackFeedHistory>
+    <trackHistory>true</trackHistory>
+    <type>Lookup</type>
+</CustomField>

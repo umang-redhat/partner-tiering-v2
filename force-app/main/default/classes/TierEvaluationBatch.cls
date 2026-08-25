@@ -14,6 +14,7 @@ public with sharing class TierEvaluationBatch implements Database.Batchable<SObj
     public Database.QueryLocator start(Database.BatchableContext bc) {
         return Database.getQueryLocator([
             SELECT Id,
+                   ProgramId,
                    MembershipNumber,
                    Build_Certify__c,
                    Reseller__c,

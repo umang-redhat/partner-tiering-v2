@@ -21,6 +21,8 @@ public with sharing class PartnerTierRuleBuilderController {
 
     public class RuleVersionDTO {
         @AuraEnabled public Id id;
+        @AuraEnabled public Id loyaltyProgramId;
+        @AuraEnabled public String loyaltyProgramName;
         @AuraEnabled public String moduleName;
         @AuraEnabled public String tierName;
         @AuraEnabled public Date inEffectDate;
@@ -45,6 +47,8 @@ public with sharing class PartnerTierRuleBuilderController {
 
         PartnerTierRuleVersion__c versionRec = [
             SELECT Id,
+                   LoyaltyProgram__c,
+                   LoyaltyProgram__r.Name,
                    Module__c,
                    Tier__c,
                    In_Effect_Date__c,
@@ -83,6 +87,8 @@ public with sharing class PartnerTierRuleBuilderController {
 
         RuleVersionDTO dto = new RuleVersionDTO();
         dto.id = versionRec.Id;
+        dto.loyaltyProgramId = versionRec.LoyaltyProgram__c;
+        dto.loyaltyProgramName = versionRec.LoyaltyProgram__r.Name;
         dto.moduleName = versionRec.Module__c;
         dto.tierName = versionRec.Tier__c;
         dto.inEffectDate = versionRec.In_Effect_Date__c;
@@ -149,13 +155,16 @@ public with sharing class PartnerTierRuleBuilderController {
             }
 
             // Lock parent so concurrent editors do not clobber each other.
-            Id lockedVersionId = [
+            List<PartnerTierRuleVersion__c> lockedVersions = [
                 SELECT Id
                 FROM PartnerTierRuleVersion__c
                 WHERE Id = :ruleVersionId
                 LIMIT 1
                 FOR UPDATE
-            ].Id;
+            ];
+            if (lockedVersions.isEmpty()) {
+                throw new AuraHandledException('Rule version not found.');
+            }
 
             List<Object> groupPayload = (List<Object>) JSON.deserializeUntyped(groupsJson);
 

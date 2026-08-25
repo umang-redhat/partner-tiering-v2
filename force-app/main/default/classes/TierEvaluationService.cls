@@ -3,7 +3,8 @@
  *              PartnerTierRuleVersion__c -> PartnerTierRuleGroup__c -> PartnerTierRuleCondition__c.
  *
  *              Evaluation model:
- *              - Rule version must be Active and inside effective date window.
+ *              - Rule version must be Active, scoped to the member's LoyaltyProgram,
+ *                and inside the effective date window (including optional deactivation date).
  *              - OR groups are evaluated; each group supports nested logic:
  *                OR inside a bucket and AND across buckets (bucket key = Condition_Order__c).
  *              - Points are evaluated as condition rows via MinimumEligibleBalance/MaximumEligibleBalance.
@@ -29,7 +30,7 @@ public with sharing class TierEvaluationService {
      */
     public class RuleContext {
         public List<PartnerTierRuleVersion__c> activeVersions;
-        public Map<String, List<PartnerTierRuleVersion__c>> versionsByModule;
+        public Map<String, List<PartnerTierRuleVersion__c>> versionsByProgramModule;
         public Map<Id, List<PartnerTierRuleGroup__c>> groupsByVersion;
         public Map<Id, List<PartnerTierRuleCondition__c>> conditionsByGroup;
     }
@@ -87,14 +88,16 @@ public with sharing class TierEvaluationService {
         RuleContext ctx = new RuleContext();
 
         ctx.activeVersions = [
-            SELECT Id, Module__c, Tier__c, Tier_Rank__c, In_Effect_Date__c
+            SELECT Id, LoyaltyProgram__c, Module__c, Tier__c, Tier_Rank__c, In_Effect_Date__c
             FROM PartnerTierRuleVersion__c
             WHERE Status__c = 'Active'
             AND In_Effect_Date__c <= :todayDate
-            ORDER BY Module__c, Tier_Rank__c DESC NULLS LAST
+            AND (Deactivation_Date__c = null OR Deactivation_Date__c >= :todayDate)
+            AND LoyaltyProgram__c != null
+            ORDER BY LoyaltyProgram__c, Module__c, Tier_Rank__c DESC NULLS LAST
         ];
 
-        ctx.versionsByModule = buildVersionsByModule(ctx.activeVersions);
+        ctx.versionsByProgramModule = buildVersionsByProgramModule(ctx.activeVersions);
         ctx.groupsByVersion = loadGroupsByVersion(ctx.activeVersions);
         ctx.conditionsByGroup = loadConditionsByGroup(ctx.groupsByVersion);
         return ctx;
@@ -131,7 +134,7 @@ public with sharing class TierEvaluationService {
 
     /**
      * @description Evaluates a single member against pre-loaded rules (zero SOQL).
-     *              Ranks within each module independently.
+     *              Ranks within each module independently for the member's program.
      * @param lpm The LoyaltyProgramMember record with all credential fields populated.
      * @param partnerPoints The member's resolved point balance.
      * @param ctx Pre-loaded RuleContext.
@@ -143,6 +146,10 @@ public with sharing class TierEvaluationService {
         RuleContext ctx
     ) {
         Map<String, TierResult> results = new Map<String, TierResult>();
+        if (lpm.ProgramId == null) {
+            return results;
+        }
+
         Map<String, Decimal> actualByField = new Map<String, Decimal>();
 
         for (String moduleEnrollmentField : MODULE_FIELD_MAP.keySet()) {
@@ -150,9 +157,11 @@ public with sharing class TierEvaluationService {
                 continue;
             }
             String moduleName = MODULE_FIELD_MAP.get(moduleEnrollmentField);
-            List<PartnerTierRuleVersion__c> moduleVersions = ctx.versionsByModule == null
-                ? null
-                : ctx.versionsByModule.get(moduleName);
+            List<PartnerTierRuleVersion__c> moduleVersions = getModuleVersionsForProgram(
+                ctx,
+                lpm.ProgramId,
+                moduleName
+            );
             if (moduleVersions == null || moduleVersions.isEmpty()) {
                 continue;
             }
@@ -170,7 +179,7 @@ public with sharing class TierEvaluationService {
                 }
                 Integer tierRank = version.Tier_Rank__c == null ? 0 : Integer.valueOf(version.Tier_Rank__c);
                 results.put(moduleName, new TierResult(moduleName, version.Tier__c, tierRank));
-                // Highest rank is first due to module-scoped DESC ordering.
+                // Highest rank is first due to program/module-scoped DESC ordering.
                 break;
             }
         }
@@ -217,6 +226,21 @@ public with sharing class TierEvaluationService {
 
     // ─── Private helpers ───
 
+    private List<PartnerTierRuleVersion__c> getModuleVersionsForProgram(
+        RuleContext ctx,
+        Id programId,
+        String moduleName
+    ) {
+        if (ctx == null || ctx.versionsByProgramModule == null) {
+            return null;
+        }
+        return ctx.versionsByProgramModule.get(buildProgramModuleKey(programId, moduleName));
+    }
+
+    private String buildProgramModuleKey(Id programId, String moduleName) {
+        return String.valueOf(programId) + '|' + moduleName;
+    }
+
     private Map<Id, List<PartnerTierRuleGroup__c>> loadGroupsByVersion(List<PartnerTierRuleVersion__c> versions) {
         Map<Id, List<PartnerTierRuleGroup__c>> grouped = new Map<Id, List<PartnerTierRuleGroup__c>>();
         if (versions.isEmpty()) {
@@ -239,15 +263,16 @@ public with sharing class TierEvaluationService {
         return grouped;
     }
 
-    private Map<String, List<PartnerTierRuleVersion__c>> buildVersionsByModule(
+    private Map<String, List<PartnerTierRuleVersion__c>> buildVersionsByProgramModule(
         List<PartnerTierRuleVersion__c> versions
     ) {
         Map<String, List<PartnerTierRuleVersion__c>> grouped = new Map<String, List<PartnerTierRuleVersion__c>>();
         for (PartnerTierRuleVersion__c version : versions) {
-            if (!grouped.containsKey(version.Module__c)) {
-                grouped.put(version.Module__c, new List<PartnerTierRuleVersion__c>());
+            String key = buildProgramModuleKey(version.LoyaltyProgram__c, version.Module__c);
+            if (!grouped.containsKey(key)) {
+                grouped.put(key, new List<PartnerTierRuleVersion__c>());
             }
-            grouped.get(version.Module__c).add(version);
+            grouped.get(key).add(version);
         }
         return grouped;
     }
@@ -289,6 +314,7 @@ public with sharing class TierEvaluationService {
     private LoyaltyProgramMember queryLoyaltyProgramMember(Id lpmId) {
         List<LoyaltyProgramMember> results = [
             SELECT Id,
+                   ProgramId,
                    MembershipNumber,
                    Build_Certify__c,
                    Reseller__c,
@@ -379,7 +405,7 @@ public with sharing class TierEvaluationService {
                     c.Field_API_Name__c,
                     actualByField
                 );
-                Decimal expected = resolveConditionExpectedValue(c);
+                Decimal expected = c.Threshold__c;
                 if (compare(actual, c.Operator__c, expected)) {
                     bucketMatched = true;
                     break;
@@ -422,10 +448,6 @@ public with sharing class TierEvaluationService {
         Decimal actual = resolveConditionActualValue(lpm, partnerPoints, fieldApiName);
         actualByField.put(fieldApiName, actual);
         return actual;
-    }
-
-    private Decimal resolveConditionExpectedValue(PartnerTierRuleCondition__c conditionRec) {
-        return conditionRec.Threshold__c;
     }
 
     private Decimal parseDecimal(Object valueObj) {

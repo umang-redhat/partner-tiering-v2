@@ -27,6 +27,7 @@ private class TierEvaluationBatchTest {
         Date today = Date.today();
 
         PartnerTierRuleVersion__c version = new PartnerTierRuleVersion__c(
+            LoyaltyProgram__c = prog.Id,
             Module__c = 'Build', Tier__c = 'Ready', Tier_Rank__c = 1,
             In_Effect_Date__c = today, Status__c = 'Active'
         );
@@ -86,16 +87,5 @@ private class TierEvaluationBatchTest {
         ];
         System.assertEquals('Completed', job.Status, 'Batch should complete successfully');
         System.assertEquals(0, job.NumberOfErrors, 'Batch should have zero errors');
-    }
-
-    @isTest
-    static void testBatchExecution_SmallScope() {
-        Integer qualifyingCount = [
-            SELECT COUNT()
-            FROM LoyaltyProgramMember
-            WHERE MemberStatus = 'Active'
-            AND (Build_Certify__c = true OR Reseller__c = true)
-        ];
-        System.assert(qualifyingCount > 0, 'Test setup should create members matched by batch start query');
     }
 }

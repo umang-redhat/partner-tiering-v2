@@ -27,12 +27,12 @@ private class TierEvaluationServiceTest {
         Date today = Date.today();
 
         List<PartnerTierRuleVersion__c> versions = new List<PartnerTierRuleVersion__c>{
-            new PartnerTierRuleVersion__c(Module__c = 'Build', Tier__c = 'Ready', Tier_Rank__c = 1, In_Effect_Date__c = today, Status__c = 'Active'),
-            new PartnerTierRuleVersion__c(Module__c = 'Build', Tier__c = 'Advanced', Tier_Rank__c = 2, In_Effect_Date__c = today, Status__c = 'Active'),
-            new PartnerTierRuleVersion__c(Module__c = 'Reseller', Tier__c = 'Ready', Tier_Rank__c = 1, In_Effect_Date__c = today, Status__c = 'Active'),
-            new PartnerTierRuleVersion__c(Module__c = 'Reseller', Tier__c = 'Advanced', Tier_Rank__c = 2, In_Effect_Date__c = today, Status__c = 'Active'),
-            new PartnerTierRuleVersion__c(Module__c = 'Build', Tier__c = 'Premier', Tier_Rank__c = 3, In_Effect_Date__c = today, Status__c = 'Draft'),
-            new PartnerTierRuleVersion__c(Module__c = 'Reseller', Tier__c = 'Premier', Tier_Rank__c = 3, In_Effect_Date__c = today.addDays(365), Status__c = 'Active')
+            new PartnerTierRuleVersion__c(LoyaltyProgram__c = prog.Id, Module__c = 'Build', Tier__c = 'Ready', Tier_Rank__c = 1, In_Effect_Date__c = today, Status__c = 'Active'),
+            new PartnerTierRuleVersion__c(LoyaltyProgram__c = prog.Id, Module__c = 'Build', Tier__c = 'Advanced', Tier_Rank__c = 2, In_Effect_Date__c = today, Status__c = 'Active'),
+            new PartnerTierRuleVersion__c(LoyaltyProgram__c = prog.Id, Module__c = 'Reseller', Tier__c = 'Ready', Tier_Rank__c = 1, In_Effect_Date__c = today, Status__c = 'Active'),
+            new PartnerTierRuleVersion__c(LoyaltyProgram__c = prog.Id, Module__c = 'Reseller', Tier__c = 'Advanced', Tier_Rank__c = 2, In_Effect_Date__c = today, Status__c = 'Active'),
+            new PartnerTierRuleVersion__c(LoyaltyProgram__c = prog.Id, Module__c = 'Build', Tier__c = 'Premier', Tier_Rank__c = 3, In_Effect_Date__c = today, Status__c = 'Draft'),
+            new PartnerTierRuleVersion__c(LoyaltyProgram__c = prog.Id, Module__c = 'Reseller', Tier__c = 'Premier', Tier_Rank__c = 3, In_Effect_Date__c = today.addDays(365), Status__c = 'Active')
         };
         insert versions;
 
@@ -201,9 +201,38 @@ private class TierEvaluationServiceTest {
     }
 
     @isTest
+    static void testEvaluateMembers_BulkReadyAPI() {
+        List<LoyaltyProgramMember> members = [
+            SELECT Id, ProgramId, MembershipNumber, Build_Certify__c, Reseller__c,
+                   Account_Software_Product_Cert__c, Account_Hardware_Product_Cert__c,
+                   Account_RHSC_Credentials__c, Account_RHTSC_Credentials__c, Account_RH_Certifications__c
+            FROM LoyaltyProgramMember
+            WHERE MembershipNumber LIKE 'TST-%'
+        ];
+        Set<Id> memberIds = new Map<Id, LoyaltyProgramMember>(members).keySet();
+
+        TierEvaluationService svc = new TierEvaluationService();
+        TierEvaluationService.RuleContext ctx = svc.loadRuleContext();
+        Map<Id, Decimal> pointsByMember = svc.bulkLoadPointBalances(memberIds);
+
+        Test.startTest();
+        Map<Id, Map<String, TierEvaluationService.TierResult>> resultsByMember =
+            svc.evaluateMembers(members, pointsByMember, ctx);
+        Test.stopTest();
+
+        System.assert(resultsByMember.size() > 0, 'evaluateMembers should return results');
+        for (LoyaltyProgramMember m : members) {
+            if (m.Build_Certify__c != true && m.Reseller__c != true) {
+                continue;
+            }
+            System.assert(resultsByMember.containsKey(m.Id), 'Each enrolled member should be evaluated');
+        }
+    }
+
+    @isTest
     static void testEvaluateMember_BulkReadyAPI() {
         LoyaltyProgramMember m = [
-            SELECT Id, MembershipNumber, Build_Certify__c, Reseller__c,
+            SELECT Id, ProgramId, MembershipNumber, Build_Certify__c, Reseller__c,
                    Account_Software_Product_Cert__c, Account_Hardware_Product_Cert__c,
                    Account_RHSC_Credentials__c, Account_RHTSC_Credentials__c, Account_RH_Certifications__c
             FROM LoyaltyProgramMember
@@ -281,6 +310,7 @@ private class TierEvaluationServiceTest {
     @isTest
     static void testAllComparisonOperators() {
         PartnerTierRuleVersion__c version = new PartnerTierRuleVersion__c(
+            LoyaltyProgram__c = [SELECT Id FROM LoyaltyProgram LIMIT 1].Id,
             Module__c = 'Build', Tier__c = 'Premier', Tier_Rank__c = 10,
             In_Effect_Date__c = Date.today(), Status__c = 'Active'
         );
@@ -327,7 +357,7 @@ private class TierEvaluationServiceTest {
         );
 
         LoyaltyProgramMember m = [
-            SELECT Id, MembershipNumber, Build_Certify__c, Reseller__c,
+            SELECT Id, ProgramId, MembershipNumber, Build_Certify__c, Reseller__c,
                    Account_Software_Product_Cert__c, Account_Hardware_Product_Cert__c,
                    Account_RHSC_Credentials__c, Account_RHTSC_Credentials__c, Account_RH_Certifications__c
             FROM LoyaltyProgramMember
@@ -389,10 +419,34 @@ private class TierEvaluationServiceTest {
     }
 
     @isTest
-    static void testTierResultProperties() {
-        TierEvaluationService.TierResult tr = new TierEvaluationService.TierResult('Build', 'Advanced', 2);
-        System.assertEquals('Build', tr.moduleName);
-        System.assertEquals('Advanced', tr.tierName);
-        System.assertEquals(2, tr.tierRank);
+    static void testProgramScopedEvaluation_IgnoresOtherProgramRules() {
+        LoyaltyProgram otherProgram = new LoyaltyProgram(Name = 'Other Test Program', Status = 'Active');
+        insert otherProgram;
+
+        PartnerTierRuleVersion__c otherProgramVersion = new PartnerTierRuleVersion__c(
+            LoyaltyProgram__c = otherProgram.Id,
+            Module__c = 'Build', Tier__c = 'Premier', Tier_Rank__c = 99,
+            In_Effect_Date__c = Date.today(), Status__c = 'Active'
+        );
+        insert otherProgramVersion;
+
+        PartnerTierRuleGroup__c grp = new PartnerTierRuleGroup__c(
+            Rule_Version__c = otherProgramVersion.Id, Group_Order__c = 1
+        );
+        insert grp;
+
+        insert new PartnerTierRuleCondition__c(
+            Rule_Group__c = grp.Id, Condition_Order__c = 1,
+            Field_API_Name__c = 'Account_Software_Product_Cert__c', Operator__c = '>=', Threshold__c = 1
+        );
+
+        LoyaltyProgramMember m = [SELECT Id FROM LoyaltyProgramMember WHERE MembershipNumber LIKE 'TST-BUILD-%' LIMIT 1];
+
+        Test.startTest();
+        Map<String, TierEvaluationService.TierResult> results = new TierEvaluationService().evaluatePartnerTiers(m.Id);
+        Test.stopTest();
+
+        System.assertEquals('Advanced', results.get('Build').tierName,
+            'Member should use rules from its own program, not another program');
     }
 }
